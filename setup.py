@@ -4,7 +4,6 @@ from setuptools import find_packages, setup
 
 install_requires = [
     'bonobo',
-    'xmlrpc',
 ]
 
 tests_require = [

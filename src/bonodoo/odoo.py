@@ -1,6 +1,6 @@
 from bonobo.nodes.io.base import Reader
 from bonobo.config.configurables import Configurable
-from bonobo.config import Option
+from bonobo.config import Option, use_context
 from xmlrpc import client as xmlrpclib
 
 
@@ -75,6 +75,7 @@ class OdooServer:
         )
 
 
+@use_context
 class OdooReader(Configurable, Reader):
     config = Option(
         required=True,
@@ -96,18 +97,27 @@ class OdooReader(Configurable, Reader):
         required=False
     )
 
-    def read(self, *args, **kwargs):
+    def read(self, context, *args, **kwargs):
         new_args = [self.domain]
         new_args += args
         new_kwargs = kwargs.copy()
         if self.limit:
             new_kwargs['limit'] = self.limit
-        if self.fields:
-            new_kwargs['fields'] = self.fields
-        yield from self.config.search_read(
+        if self.fields and not context.output_type:
+            context.set_output_fields(self.fields)
+        fields = context.get_output_fields()
+        results = self.config.search_read(
             self.model,
             *new_args,
             **new_kwargs
         )
+        if not fields:
+            yield from results
+        else:
+            for result in results:
+                final_result = []
+                for field in fields:
+                    final_result.append(result.get(field, False))
+                yield tuple(final_result) if self.fields else result
 
     __call__ = read
