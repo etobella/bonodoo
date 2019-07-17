@@ -1,0 +1,1 @@
+Odoo plugins for Bonobo
