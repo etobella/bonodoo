@@ -1,7 +1,8 @@
 from bonobo.nodes.io.base import Reader
 from bonobo.config.configurables import Configurable
-from bonobo.config import Option, use_context
+from bonobo.config import Option, Service, use_context
 from xmlrpc import client as xmlrpclib
+import ssl
 
 
 class OdooServer:
@@ -29,11 +30,11 @@ class OdooServer:
 
     @property
     def common(self):
-        return xmlrpclib.ServerProxy('{}/xmlrpc/2/common'.format(self.url))
+        return xmlrpclib.ServerProxy('{}/xmlrpc/2/common'.format(self.url), context=ssl._create_unverified_context())
 
     @property
     def models(self):
-        return xmlrpclib.ServerProxy('{}/xmlrpc/2/object'.format(self.url))
+        return xmlrpclib.ServerProxy('{}/xmlrpc/2/object'.format(self.url), context=ssl._create_unverified_context())
 
     def authenticate(self):
         self.uid = self.common.login(self.database, self.user, self.password)
@@ -75,15 +76,16 @@ class OdooServer:
         )
 
 
-@use_context
-class OdooReader(Configurable, Reader):
-    config = Option(
-        required=True,
-    )
+class OdooBase(Configurable, Reader):
+    config = Service('odoo.server')
     model = Option(
         type=str,
         required=True,
     )
+
+
+@use_context
+class OdooReader(OdooBase):
     domain = Option(
         type=list,
         default=[],
@@ -97,7 +99,7 @@ class OdooReader(Configurable, Reader):
         required=False
     )
 
-    def read(self, context, *args, **kwargs):
+    def read(self, context, *args, config, **kwargs):
         new_args = [self.domain]
         new_args += args
         new_kwargs = kwargs.copy()
@@ -106,7 +108,7 @@ class OdooReader(Configurable, Reader):
         if self.fields and not context.output_type:
             context.set_output_fields(self.fields)
         fields = context.get_output_fields()
-        results = self.config.search_read(
+        results = config.search_read(
             self.model,
             *new_args,
             **new_kwargs
@@ -119,5 +121,29 @@ class OdooReader(Configurable, Reader):
                 for field in fields:
                     final_result.append(result.get(field, False))
                 yield tuple(final_result) if self.fields else result
+
+    __call__ = read
+
+
+@use_context
+class OdooModelFunction(OdooBase):
+    function = Option(
+        type=str,
+        required=True,
+    )
+    args = Option(type=list, default=[])
+    kwargs = Option(type=dict, default={})
+
+    def read(self, context, *values, config):
+        result = config.execute(
+            self.model,
+            self.function,
+            *self.args,
+            **self.kwargs,
+        )
+        if isinstance(result, list):
+            yield from result
+        else:
+            yield result
 
     __call__ = read

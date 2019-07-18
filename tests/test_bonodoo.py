@@ -1,5 +1,5 @@
 from mock import patch
-from bonodoo import OdooServer, OdooReader
+from bonodoo import OdooServer, OdooReader, OdooModelFunction
 import bonobo
 from bonobo.nodes.io.csv import CsvWriter
 from bonobo.structs.graphs import Graph
@@ -19,13 +19,12 @@ class TestBonodoo(unittest.TestCase):
             database='test'
         )
 
-    def test_bonodoo(self):
-
+    def test_bonodoo_reader(self):
         folder = tempfile.TemporaryDirectory()
         filename = 'test_file.csv'
         value_1 = {'id': 2}
         value_2 = {'id': 3}
-        read = OdooReader(model='res.users', config=self.server, domain=[])
+        read = OdooReader(model='res.users', domain=[])
         with patch('xmlrpc.client.ServerProxy') as mk:
             mock_server = mk.return_value
             mock_server.login.return_value = 1
@@ -37,7 +36,8 @@ class TestBonodoo(unittest.TestCase):
             graph = Graph()
             graph.add_chain(read, CsvWriter(filename, fs='fs.data'))
             bonobo.run(graph, services={
-                'fs.data': bonobo.open_fs(folder.name)
+                'fs.data': bonobo.open_fs(folder.name),
+                'odoo.server': self.server,
             })
             mk.assert_called()
         with open(os.path.join(folder.name, filename), 'r') as f:
@@ -47,13 +47,13 @@ class TestBonodoo(unittest.TestCase):
             self.assertEqual(ast.literal_eval(lines[1]), value_2)
         folder.cleanup()
 
-    def test_fields(self):
+    def test_bonodoo_reader_fields(self):
         folder = tempfile.TemporaryDirectory()
         filename = 'test_file.csv'
         value_1 = {'id': 2}
         value_2 = {'id': 3}
         read = OdooReader(
-            model='res.users', config=self.server, domain=[], fields=['id'],
+            model='res.users', domain=[], fields=['id'],
         )
         with patch('xmlrpc.client.ServerProxy') as mk:
             mock_server= mk.return_value
@@ -62,7 +62,8 @@ class TestBonodoo(unittest.TestCase):
             graph = Graph()
             graph.add_chain(read, CsvWriter(filename, fs='fs.data'))
             bonobo.run(graph, services={
-                'fs.data': bonobo.open_fs(folder.name)
+                'fs.data': bonobo.open_fs(folder.name),
+                'odoo.server': self.server,
             })
             mk.assert_called()
         with open(os.path.join(folder.name, filename), 'r') as f:
@@ -70,4 +71,54 @@ class TestBonodoo(unittest.TestCase):
             self.assertEqual(len(lines), 3)
             self.assertEqual(ast.literal_eval(lines[1]), value_1.get('id'))
             self.assertEqual(ast.literal_eval(lines[2]), value_2.get('id'))
+        folder.cleanup()
+
+    def test_bonodoo_function_multi(self):
+        folder = tempfile.TemporaryDirectory()
+        filename = 'test_file.csv'
+        read = OdooModelFunction(
+            model='res.users', function='test_function'
+        )
+        value_1 = {'id': 2}
+        value_2 = {'id': 3}
+        with patch('xmlrpc.client.ServerProxy') as mk:
+            mock_server = mk.return_value
+            mock_server.login.return_value = 1
+            mock_server.execute_kw.return_value = [value_1, value_2]
+            graph = Graph()
+            graph.add_chain(read, CsvWriter(filename, fs='fs.data'))
+            bonobo.run(graph, services={
+                'fs.data': bonobo.open_fs(folder.name),
+                'odoo.server': self.server,
+            })
+            mk.assert_called()
+        with open(os.path.join(folder.name, filename), 'r') as f:
+            lines = f.readlines()
+            self.assertEqual(len(lines), 2)
+            self.assertEqual(ast.literal_eval(lines[0]), value_1)
+            self.assertEqual(ast.literal_eval(lines[1]), value_2)
+        folder.cleanup()
+
+    def test_bonodoo_function_single(self):
+        folder = tempfile.TemporaryDirectory()
+        filename = 'test_file.csv'
+        read = OdooModelFunction(
+            model='res.users', function='test_function'
+        )
+        value_1 = {'id': 2}
+        with patch('xmlrpc.client.ServerProxy') as mk:
+            mock_server = mk.return_value
+            mock_server.login.return_value = 1
+            mock_server.execute_kw.return_value = value_1
+            graph = Graph()
+            graph.add_chain(read, CsvWriter(filename, fs='fs.data'))
+            bonobo.run(graph, services={
+                'fs.data': bonobo.open_fs(folder.name),
+                'odoo.server': self.server,
+            })
+            mk.assert_called()
+        with open(os.path.join(folder.name, filename), 'r') as f:
+            lines = f.readlines()
+            self.assertEqual(len(lines), 1)
+            self.assertEqual(ast.literal_eval(lines[0]), value_1)
         folder.cleanup()
