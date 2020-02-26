@@ -30,11 +30,19 @@ class OdooServer:
 
     @property
     def common(self):
-        return xmlrpclib.ServerProxy('{}/xmlrpc/2/common'.format(self.url), context=ssl._create_unverified_context())
+        return xmlrpclib.ServerProxy(
+            '{}/xmlrpc/2/common'.format(self.url),
+            context=ssl._create_unverified_context(),
+            allow_none=True
+        )
 
     @property
     def models(self):
-        return xmlrpclib.ServerProxy('{}/xmlrpc/2/object'.format(self.url), context=ssl._create_unverified_context())
+        return xmlrpclib.ServerProxy(
+            '{}/xmlrpc/2/object'.format(self.url),
+            context=ssl._create_unverified_context(),
+            allow_none=True
+        )
 
     def authenticate(self):
         self.uid = self.common.login(self.database, self.user, self.password)
